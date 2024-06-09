@@ -13,14 +13,14 @@ const config = {
   favicon: 'img/logo.png',
 
   // Set the production url of your site here
-  url: 'https://your-docusaurus-site.example.com',
+  url: 'https://github.com',
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/',
+  baseUrl: '/hello-react/',
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
-  organizationName: 'bissoft', // Usually your GitHub org/user name.
+  organizationName: 'bisdocs', // Usually your GitHub org/user name.
   projectName: 'hello-react', // Usually your repo name.
 
   onBrokenLinks: 'throw',
