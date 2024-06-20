@@ -404,10 +404,49 @@ const [list, updateList] = useImmer(initialList);
 Refer the official doc for more info
 
 
+## Undefined State Problem
+Most of the times when we have undefined state and access to any value it will throw error and we will see a blank page.
+```jsx
+import { useState } from "react";
+
+function UndefinedState() {
+  const [person, setPerson] = useState();
+
+  return (
+    <>
+      <h1>Name is {person.name}</h1>
+    </>
+  );
+}
+
+export default UndefinedState;
+```
+**Solutions**
+
+```jsx
+//Use optional parameters
+<h1>Name is {person?.name}</h1>
+
+//Make it conditional
+{person && <h1>Name is {person.name}</h1>}
+
+//Initialize the state as blank
+useState('');
+useState({});
+useState([]);
+```
+
+
 ## Key Points
 - useState is a hook so it can only be called at the top level of the component
 - If we need to call it inside any condition/loop then move the state logic to another component and use.
 - In strict mode, React will call the initializer function twice. This behaviour is only in dev environment and doesn't impact production. Since the initializer function needs to be pure, this shouldn't affect the behaviour. The result from one of the two calls will be ignored.
+- useState hook executes in the same order
+```jsx
+useState() -- executes first
+useState()
+useState() -- executes last
+```
 
 
 ## More Info

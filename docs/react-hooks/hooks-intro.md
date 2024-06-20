@@ -1,5 +1,5 @@
 ---
-sidebar_position: 2
+sidebar_position: 1
 ---
 
 # React Hooks
@@ -10,9 +10,22 @@ React hooks are like utility functions that allows functional components to use 
 - Hooks are introduced in React 16.8 to give super powers to functional components
 - Now functional components can manage state, have access to life cycle methods.
 
-## Internals
+## Basics
+- Hooks helps us to use different React features from the components
+- We can either use `built in` hooks or create custom hooks
+- It simplifies when we have complex stateful logic or reuse logic between different components.
+- Hooks are nothing but special functions (can be stateful, manage side effects)
+- It's clean, reusable, easy to test and small bundle size(boosts performance)
+- If we want to know all the available hooks `console.log(React)`
 
-The hooks come from [react](https://unpkg.com/react@18.3.1/umd/react.development.js) library.
+**Built in Hooks**
+- State Hooks - useState & useReducer
+- Context Hooks - useContext
+- Ref Hooks - useRef, useImperativeHandle
+- Effect Hooks - useEffect, useLayoutEffect, useInsertionEffect
+- Performance Hooks - useMemo, useCallback, useTransition, useDeferredValue
+- Other hooks - useDebugValue, useId, useSyncExternalStore, useActionState 
+
 
 ## Rules of Hooks
 - Functions whose names start with `use` are called Hooks in React.
@@ -129,6 +142,10 @@ function throwInvalidHookError() {
   );
 }
 ```
+
+## Internals
+
+The hooks come from [react](https://unpkg.com/react@18.3.1/umd/react.development.js) library.
 
 ## Strict Mode
 * React calls the initializer function twice in order to help to find accidental impurities
