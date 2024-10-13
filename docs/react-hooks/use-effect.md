@@ -188,6 +188,486 @@ function Demo() {
 - For effects not triggered by user interactions, React will typically wait until after it has finished updating the DOM with the latest changes before running the effect. 
 - This approach ensures that the user sees the most up-to-date UI without interruptions caused by ongoing background tasks or updates.
 
+
+## Connecting to an external system
+
+Some components need to be connected to external systems (such as different network, browser API, third party library) while they are displayed on the page. The systems are not controlled by react so called as external systems.
+
+**Chat Room Example**
+- When the `ChatRoom` component gets added to the page, it will connect to the chat room with the initial `serverUrl` and `roomId`
+- If the user picks a different chat room (in a dropdown) then the `serverUrl` or `roomId` will change and trigger a re render of the component. 
+- The changes in the effect dependency will rerun the effect. First it will disconnect from the previous room, and then connect to the next one.
+- When the ChatRoom component is removed from the page, the Effect will disconnect one last time.
+```jsx
+import { useEffect } from 'react';
+import { createConnection } from './chat.js';
+
+function ChatRoom({ roomId }) {
+  const [serverUrl, setServerUrl] = useState('https://localhost:1234');
+
+  useEffect(() => {
+  	const connection = createConnection(serverUrl, roomId);
+    connection.connect();
+  	return () => {
+      connection.disconnect();
+  	};
+  }, [serverUrl, roomId]);
+  // ...
+}
+```
+- It has two parameters
+   - `Setup` function (that connects to a system), also the `cleanup` function that disconnects from the system
+   - List of `dependencies` (every value from component that's used inside the effect function)
+- The execution flow
+    - React calls the setup function when the component is added to the page(mounts)
+    - After every re render of the component when the dependencies change
+        - First the cleanup code runs with old props and state
+        - Then the setup function runs with new props and state
+    - The cleanup code runs one final time when the component is removed from the page.
+
+**Key Points**
+- Effect helps us to keep the component synchronized with external system.
+- The external system means these are not controlled by react
+- A timer managed with `setInterval()` and `clearInterval()`
+- An event subscription using `window.addEventListener()` and `window.removeEventListener()`
+- A third-party animation library with an API like `animation.start()` and `animation.reset().`
+
+**The Chat App**
+
+```jsx
+import React, { useState } from "react";
+import ChatRoom from "./ChatRoom";
+
+function ChatApp() {
+  const [roomId, setRoomId] = useState("general");
+  const [show, setShow] = useState(false);
+
+  return (
+    <div>
+      <label>
+        Choose the chat room:{" "}
+        <select value={roomId} onChange={(e) => setRoomId(e.target.value)}>
+          <option value="general">general</option>
+          <option value="travel">travel</option>
+          <option value="music">music</option>
+        </select>
+      </label>
+
+      <button onClick={() => setShow(!show)}>
+        {show ? "Close chat" : "Open chat"}
+      </button>
+      {show && <hr />}
+      {show && <ChatRoom roomId={roomId} />}
+    </div>
+  );
+}
+
+export default ChatApp;
+```
+
+```jsx
+import React, { useState } from "react";
+import { useEffect } from "react";
+import { createConnection } from "./chat";
+
+function ChatRoom({ roomId }) {
+  const [serverUrl, setServerUrl] = useState("https://localhost:1234");
+
+  useEffect(() => {
+    const connection = createConnection(serverUrl, roomId);
+    connection.connect();
+
+    return () => {
+      connection.disconnect();
+    };
+  }, [roomId, serverUrl]);
+
+  return (
+    <div>
+      <label htmlFor="">Server URL</label>
+      <input
+        type="text"
+        value={serverUrl}
+        onChange={(e) => setServerUrl(e.target.value)}
+      />
+    </div>
+  );
+}
+
+export default ChatRoom;
+```
+
+```jsx
+export function createConnection(serverUrl, roomId) {
+  return {
+    connect() {
+      console.log(
+        '✅ Connecting to "' + roomId + '" room at ' + serverUrl + "..."
+      );
+    },
+    disconnect() {
+      console.log('❌ Disconnected from "' + roomId + '" room at ' + serverUrl);
+    },
+  };
+}
+```
+
+**Window Listener**
+```jsx
+import React, { useState } from "react";
+import { useWindowListener } from "./useWindowListener";
+
+function WindowApp() {
+  const [position, setPosition] = useState({ x: 0, y: 0 });
+
+  useWindowListener("pointermove", (e) => {
+    setPosition({ x: e.clientX, y: e.clientY });
+  });
+  return (
+    <div
+      style={{
+        position: "absolute",
+        backgroundColor: "pink",
+        borderRadius: "50%",
+        opacity: 0.6,
+        transform: `translate(${position.x}px, ${position.y}px)`,
+        pointerEvents: "none",
+        left: -20,
+        top: -20,
+        width: 40,
+        height: 40,
+      }}
+    />
+  );
+}
+
+export default WindowApp;
+```
+
+```jsx
+import { useEffect } from "react";
+
+export function useWindowListener(eventType, listener) {
+  useEffect(() => {
+    window.addEventListener(eventType, listener);
+    return () => {
+      window.removeEventListener(eventType, listener);
+    };
+  }, [eventType, listener]);
+}
+```
+
+**Trigerring Animation**
+- Here the external system is animation library `animation.js`
+- Refresh the page to see the animation loads
+
+```jsx
+export class FadeInAnimation {
+  constructor(node) {
+    this.node = node;
+  }
+  start(duration) {
+    this.duration = duration;
+    if (this.duration === 0) {
+      // Jump to end immediately
+      this.onProgress(1);
+    } else {
+      this.onProgress(0);
+      // Start animating
+      this.startTime = performance.now();
+      this.frameId = requestAnimationFrame(() => this.onFrame());
+    }
+  }
+  onFrame() {
+    const timePassed = performance.now() - this.startTime;
+    const progress = Math.min(timePassed / this.duration, 1);
+    this.onProgress(progress);
+    if (progress < 1) {
+      // We still have more frames to paint
+      this.frameId = requestAnimationFrame(() => this.onFrame());
+    }
+  }
+  onProgress(progress) {
+    this.node.style.opacity = progress;
+  }
+  stop() {
+    cancelAnimationFrame(this.frameId);
+    this.startTime = null;
+    this.frameId = null;
+    this.duration = 0;
+  }
+}
+```
+
+```jsx
+import React, { useEffect, useRef } from "react";
+import { FadeInAnimation } from "./Animation";
+
+function AniApp() {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const animation = new FadeInAnimation(ref.current);
+    animation.start(3000);
+
+    return () => {
+      animation.stop();
+    };
+  }, []);
+  return (
+    <h1
+      ref={ref}
+      style={{
+        opacity: 0,
+        color: "white",
+        padding: 50,
+        textAlign: "center",
+        fontSize: 50,
+        backgroundImage:
+          "radial-gradient(circle, rgba(30, 30, 30, 1) 0%, rgba(255, 255, 255, 1) 100%)",
+      }}
+    >
+      Welcome
+    </h1>
+  );
+}
+
+export default AniApp;
+```
+
+**Modal Dialog**
+- Here the external system is the browser DOM
+- Uses effect to synchronize the `isOpen` prop with `showModal` & `close`
+
+```jsx
+import React, { useEffect, useRef } from "react";
+import './ModalDialog.css';
+
+function ModalDialog({ isOpen, children }) {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!isOpen) {
+      return;
+    }
+    const dialog = ref.current;
+    dialog.showModal();
+
+    return () => {
+      dialog.close();
+    };
+  }, [isOpen]);
+  return <dialog className="modal" ref={ref}>{children}</dialog>;
+}
+
+export default ModalDialog;
+```
+
+```jsx
+import React, { useState } from "react";
+import ModalDialog from "./ModalDialog";
+
+function ModalApp() {
+  const [show, setShow] = useState(false);
+
+  return (
+    <>
+      <button onClick={() => setShow(true)}>Open Dialog</button>
+      <h1>Hello World</h1>
+      <ModalDialog isOpen={show}>
+        Hello There!
+        <br />
+        <button onClick={() => setShow(false)}>Close</button>
+      </ModalDialog>
+    </>
+  );
+}
+
+export default ModalApp;
+```
+
+**Element Visibility**
+- Here the external system is browser DOM
+- When we scroll the page and the Box is fully in the view port, it changes the background color to black. If we scroll more and the box goes out of the view it changes to white.
+- Box component uses an effect to manage `IntersectionObserver` the browser API notifies when the DOM element is visible in the view port.
+```jsx
+import { useRef, useEffect } from "react";
+
+export default function Box() {
+  const ref = useRef(null);
+
+  useEffect(() => {
+    const div = ref.current;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const entry = entries[0];
+        if (entry.isIntersecting) {
+          document.body.style.backgroundColor = "black";
+          document.body.style.color = "white";
+        } else {
+          document.body.style.backgroundColor = "white";
+          document.body.style.color = "black";
+        }
+      },
+      {
+        threshold: 1.0,
+      }
+    );
+    observer.observe(div);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      style={{
+        padding: 20,
+        border: "2px solid black",
+      }}
+    >
+      <h1>Next Article</h1>
+    </div>
+  );
+}
+```
+```jsx
+import React from "react";
+import Box from "./Box";
+
+function VisibleApp() {
+  return (
+    <>
+      <LongSection />
+      <Box />
+      <LongSection />
+      <Box />
+      <LongSection />
+    </>
+  );
+}
+
+function LongSection() {
+  const text = `Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`;
+
+  const items = [];
+  for (let i = 0; i < 50; i++) {
+    items.push(<li key={i}>{text}</li>);
+  }
+  return <ul>{items}</ul>;
+}
+
+export default VisibleApp;
+```
+
+
+## Effect as custom hook
+- When we write Effect more often then it's better to use as custom hook
+
+```jsx
+import { useEffect } from 'react';
+import { createConnection } from './chat.js';
+
+export function useChatRoom({ serverUrl, roomId }) {
+  useEffect(() => {
+    const connection = createConnection(serverUrl, roomId);
+    connection.connect();
+    return () => {
+      connection.disconnect();
+    };
+  }, [roomId, serverUrl]);
+}
+
+//in app.jsx call like this
+ useChatRoom({
+    roomId: roomId,
+    serverUrl: serverUrl
+  });
+```
+
+## Controlling non-React widget
+- Sometimes we want to keep an external system synchronized to some prop in our component
+- For example, the zoom prop in our component can zoom in/out the actual map widget
+- For below example install `leaflet`, `react-leaflet`
+- Here cleanup function is not required, as the map widget works on a dom node. Once the component is removed from the DOM, the dom node will be removed also.
+
+```jsx
+//Map widget
+import "leaflet/dist/leaflet.css";
+import * as L from "leaflet";
+
+export class MapWidget {
+  constructor(domNode) {
+    this.map = L.map(domNode, {
+      zoomControl: false,
+      doubleClickZoom: false,
+      boxZoom: false,
+      keyboard: false,
+      scrollWheelZoom: false,
+      zoomAnimation: false,
+      touchZoom: false,
+      zoomSnap: 0.1,
+    });
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "© OpenStreetMap",
+    }).addTo(this.map);
+    this.map.setView([0, 0], 0);
+  }
+  setZoom(level) {
+    this.map.setZoom(level);
+  }
+}
+```
+```jsx
+//Map component
+import React, { useEffect, useRef } from 'react';
+import { MapWidget } from './map-widget';
+
+function MapComponent({ zoomLevel }) {
+  const containerRef = useRef(null);
+  const mapRef = useRef(null);
+
+  useEffect(() => {
+    if (mapRef.current === null) {
+      mapRef.current = new MapWidget(containerRef.current);
+    }
+
+    const map = mapRef.current;
+    map.setZoom(zoomLevel);
+  }, [zoomLevel]);
+
+  return (
+    <div
+      style={{ width: 600, height: 600 }}
+      ref={containerRef}
+    />
+  );
+}
+
+export default MapComponent;
+```
+```jsx
+import React, { useState } from 'react'
+import MapComponent from './MapComponent';
+
+function MapApp() {
+    const [zoomLevel, setZoomLevel] = useState(0);
+    return (
+      <>
+        Zoom level: {zoomLevel}x
+        <button onClick={() => setZoomLevel(zoomLevel + 1)}>+</button>
+        <button onClick={() => setZoomLevel(zoomLevel - 1)}>-</button>
+        <hr />
+        <MapComponent zoomLevel={zoomLevel} />
+      </>
+    );
+}
+
+export default MapApp
+```
+
 ## Fetching Data
 We can use an effect to fetch data for the component
 - If we are using any framework then fetching data using the framework mechanism is better than writing effect manually
@@ -242,3 +722,173 @@ The client computer need to download all JS & render the app only to discover it
 - Fetching data directly means we are not caching the data, so if the component unmounts & mounts, data needs to be fetched again
 - Morden react frameworks (e.g NextJS) has built in data fetching mechanism, prefer to use the same.
 - Otherwise consider using client side cache React Query, React Router etc. We can build our own solution too.
+
+## Reactive dependency
+- We shouldn't `choose` the dependencies of the Effect. 
+- Every reactive value used by the Effect's code must be declared as a dependency. 
+- If either `serverUrl` or `roomId` change, the Effect will reconnect to the chat using the new values.
+- Reactive values include props and all variables and functions declared directly inside of your component.
+
+```jsx
+function ChatRoom({ roomId }) { // This is a reactive value
+  const [serverUrl, setServerUrl] = useState('https://localhost:1234'); 
+  // This is a reactive value too
+
+  useEffect(() => {
+    const connection = createConnection(serverUrl, roomId); 
+    // This Effect reads these reactive values
+    connection.connect();
+    return () => connection.disconnect();
+  }, [serverUrl, roomId]); 
+  // ✅ So you must specify them as dependencies of your Effect
+  // ...
+}
+```
+- If we correctly setup the linter then it will flag errors if we remove the reactive dependency.
+- If we want to remove from the dependency then we will have to prove to the linter that it's not reactive (won't change on re-renders)
+```jsx
+const serverUrl = 'https://localhost:1234'; // Not a reactive value anymore
+```
+- If we remove all the dependencies, an effect with empty dependencies doesn’t re-run when any of the component's props or state change.
+- Sometimes we might see comments that suppresses the linter, which is not a good practice 
+```jsx
+useEffect(() => {
+  // ...
+  // 🔴 Avoid suppressing the linter like this:
+  // eslint-ignore-next-line react-hooks/exhaustive-deps
+}, []);
+```
+**Having Dependency Array**
+
+If we specify the dependencies, the Effect runs after the initial render and after re-renders with changed dependencies.
+```jsx
+//Dependency Array
+useEffect(() => {
+  // ...
+}, [a, b]); // Runs again if a or b are different
+```
+
+**Empty Dependency**
+
+If the Effect truly doesn’t use any reactive values, it will only run after the initial render.
+```jsx
+//Empty dependency array
+useEffect(() => {
+  // ...
+}, []); // Does not run again (except once in development)
+```
+
+**No Dependency**
+
+If we pass no dependency array at all, the Effect runs after every single render (and re-render) of the component.
+```jsx
+useEffect(() => {
+  // ...
+}); // Always runs again
+```
+
+**Update State Based on previous state from Effect**
+- If we use `setCounter(counter+1)` & use the `counter` in the dependency array  then we might run into a problem
+- When we specify the counter as dependency it resets the interval
+- The correct approach is to use the updater function and remove the counter dependency.
+```jsx
+import React, { useEffect, useState } from "react";
+
+function CounterApp() {
+  const [counter, setCounter] = useState(0);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      setCounter(prevCounter => prevCounter+1);
+    }, 1000);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, []);
+  return (
+    <div>
+      <h1> {counter}</h1>
+    </div>
+  );
+}
+
+export default CounterApp;
+```
+**Removing Object Dependency**
+- Don't specify the object as dependency
+- Every re-render the object is created from scratch and it will run the effect
+```jsx
+const serverUrl = 'https://localhost:1234';
+
+function ChatRoom({ roomId }) {
+  const [message, setMessage] = useState('');
+
+  const options = { // 🚩 This object is created from scratch on every re-render
+    serverUrl: serverUrl,
+    roomId: roomId
+  };
+
+  useEffect(() => {
+    const connection = createConnection(options); // It's used inside the Effect
+    connection.connect();
+    return () => connection.disconnect();
+  }, [options]); // 🚩 As a result, these dependencies are always different on a re-render
+  // ...
+```
+- Instead create the object inside the useEffect
+```jsx
+useEffect(() => {
+    const options = {
+      serverUrl: serverUrl,
+      roomId: roomId
+    };
+    const connection = createConnection(options);
+    connection.connect();
+    return () => connection.disconnect();
+  }, [roomId]);
+```
+**Removing unnecessary function dependencies**
+- Don't use functions as dependency as it might run too often
+- Here the effect reconnects after every render because the `createOptions` function is different for every render
+```jsx
+function ChatRoom({ roomId }) {
+  const [message, setMessage] = useState('');
+
+  function createOptions() { // 🚩 This function is created from scratch on every re-render
+    return {
+      serverUrl: serverUrl,
+      roomId: roomId
+    };
+  }
+
+  useEffect(() => {
+    const options = createOptions(); // It's used inside the Effect
+    const connection = createConnection(options);
+    connection.connect();
+    return () => connection.disconnect();
+  }, [createOptions]); // 🚩 As a result, these dependencies are always different on a re-render
+  // ...
+```
+- Instead create the function inside useEffect
+```jsx
+  useEffect(() => {
+    function createOptions() {
+      return {
+        serverUrl: serverUrl,
+        roomId: roomId
+      };
+    }
+
+    const options = createOptions();
+    const connection = createConnection(options);
+    connection.connect();
+    return () => connection.disconnect();
+  }, [roomId]);
+```
+
+## Further Reading
+- useEffectEvent
+- Displaying different content on the server and the client 
+- [You might not need an effect](https://react.dev/learn/you-might-not-need-an-effect)
+- [Official docs](https://react.dev/reference/react/useEffect)
